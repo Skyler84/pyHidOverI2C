@@ -3,14 +3,14 @@ requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyHidOverI2C"
-version = "0.1.0"
+name = "HidOverI2C"
+version = "0.1.1"
 description = "Python library for communicating with HID-over-I2C devices"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENCE" }
 authors = [
-	{ name = "pyHidOverI2C contributors" },
+	{ name = "Skyler Mansfield" },
 ]
 keywords = ["hid", "i2c", "hid-over-i2c", "embedded", "hardware"]
 classifiers = [
@@ -28,8 +28,17 @@ classifiers = [
 	"Topic :: System :: Hardware",
 ]
 dependencies = [
-    "smbus2>=0.5.0"
+	
 ]
+
+[project.optional-dependencies]
+SMBus2 = ["smbus2>=0.5.0"]
+Examples = [
+	"hidapi",
+	"ft260",
+	"hid-parser",
+]
+
 
 [project.urls]
 Homepage = "https://github.com/Skyler84/pyHidOverI2C"

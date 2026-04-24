@@ -1,7 +1,11 @@
 import struct
 from dataclasses import dataclass
-from smbus2 import i2c_msg
 from enum import Enum
+
+try:
+    from smbus2 import i2c_msg
+except ImportError:
+    from .i2c_msg import i2c_msg
 
 class HidOverI2c:
     @dataclass
@@ -16,6 +20,7 @@ class HidOverI2c:
             values = cls.STRUCT.unpack(data)
             return cls(*values)
 
+    @dataclass
     class HidOverI2cDescriptor:
         wHIDDescLength: int
         bcdVersion: int
@@ -51,17 +56,21 @@ class HidOverI2c:
         VENDOR       = 0b1110
 
     class ReportType(Enum):
-        Input   = 0b01
-        Output  = 0b10
-        Feature = 0b11
+        RESERVED = 0b00
+        Input    = 0b01
+        Output   = 0b10
+        Feature  = 0b11
 
     def __init__(self, bus, addr, descriptor_reg):
         self._bus = bus
         self._addr = addr
         self._descriptor_reg = descriptor_reg
-
-        descriptor_header = self.HidOverI2cDescriptorHeader.unpack(self._register_read(self._descriptor_reg, 4))
-        self._descriptor = self.HidOverI2cDescriptor.unpack(self._register_read(self._descriptor_reg, descriptor_header.wHIDDescLength))
+        read_msgs = self._register_read(self._descriptor_reg, 4)
+        self._bus.i2c_rdwr(*read_msgs)
+        descriptor_header = self.HidOverI2cDescriptorHeader.unpack(bytes(read_msgs[-1]))
+        read_msgs = self._register_read(self._descriptor_reg, descriptor_header.wHIDDescLength)
+        self._bus.i2c_rdwr(*read_msgs)
+        self._descriptor = self.HidOverI2cDescriptor.unpack(bytes(read_msgs[-1]))
 
     def read(self, size, timeout=None):
         return self._input_read(size, timeout)
@@ -70,21 +79,21 @@ class HidOverI2c:
         self._output_write(data)
     
     def get_input_report(self, report_id, size):
-        return self._get_request(self.RequestOpcode.GET_REPORT, self.ReportType.Input, report_id, size)
+        return self._get_request(self.RequestOpcode.GET_REPORT, self.ReportType.Input, report_id, size=size)[2:]
 
     def set_output_report(self, report_id, data):
         self._set_request(self.RequestOpcode.SET_REPORT, self.ReportType.Output, report_id, data)
 
     def get_feature_report(self, report_id, size):
-        return self._get_request(self.RequestOpcode.GET_REPORT, self.ReportType.Feature, report_id, size)
+        return self._get_request(self.RequestOpcode.GET_REPORT, report_type=self.ReportType.Feature, report_id=report_id, size=size)
 
     def set_feature_report(self, report_id, data):
-        self._set_request(self.RequestOpcode.SET_REPORT, self.ReportType.Feature, report_id, data)
+        self._set_request(self.RequestOpcode.SET_REPORT, self.ReportType.Feature, report_id=report_id, data=data)
 
     def get_report_descriptor(self, size = 4096):
         i2c_msgs = self._register_read(self._report_descriptor_register, size)
         self._bus.i2c_rdwr(*i2c_msgs)
-        return bytes(i2c_msgs)
+        return bytes(i2c_msgs[-1])
 
     def get_idle(self):
         _bytes = self._get_request(self.RequestOpcode.GET_IDLE, size=2)
@@ -109,33 +118,30 @@ class HidOverI2c:
         assert 0 <= power <= 1
         self._set_request(self.RequestOpcode.SET_POWER, report_id=power)
 
-    def _get_request(self, opcode: RequestOpcode, report_type, report_id, size) -> bytes:
+    def _get_request(self, opcode: RequestOpcode, *, report_type = ReportType.RESERVED, report_id = 0, size) -> bytes:
         _command_bytes = self._register_bytes(self._command_register) + self._pack_request(opcode, report_type, report_id)
         _data_bytes = self._register_bytes(self._data_register)
-        write = i2c_msg(self._addr, _command_bytes + _data_bytes)
-        read = i2c_msg(self._addr, size)
+        write = i2c_msg.write(self._addr, _command_bytes + _data_bytes)
+        read = i2c_msg.read(self._addr, size+2) # +2 for length prefix
         self._bus.i2c_rdwr(write, read)
-        return bytes(read)
+        return bytes(read)[2:]
 
-    def _set_request(self, opcode: RequestOpcode, report_type = 0, report_id = 0, data: bytes|None = None) -> None:
+    def _set_request(self, opcode: RequestOpcode, report_type = ReportType.RESERVED, report_id = 0, data: bytes|None = None) -> None:
         _command_bytes = self._register_bytes(self._command_register) + self._pack_request(opcode, report_type, report_id)
         if data is not None:
-            _data_bytes = self._register_bytes(self._data_register) + data
-            write = i2c_msg(_command_bytes + _data_bytes)
+            _data_bytes = self._register_bytes(self._data_register) + struct.pack("<H", len(data)+2) + data
+            write = i2c_msg.write(self._addr, _command_bytes + _data_bytes)
         else:
-            write = i2c_msg(_command_bytes)
+            write = i2c_msg.write(self._addr, _command_bytes)
         self._bus.i2c_rdwr(write)
 
     @staticmethod
-    def _pack_request(opcode: RequestOpcode, report_type, report_id) -> bytes:
+    def _pack_request(opcode: RequestOpcode, report_type: ReportType, report_id) -> bytes:
         assert 0 <= report_id <= 255
-        assert 0 <= opcode <= 15
-        assert 0 <= report_type <= 3
-
         if report_id < 15:
-            _bytes = [report_id | (report_type << 4), opcode]
+            _bytes = [report_id | (report_type.value << 4), opcode.value]
         else:
-            _bytes = [15 | (report_type << 4), opcode, report_id]
+            _bytes = [15 | (report_type.value << 4), opcode.value, report_id]
 
         return bytes(_bytes)
 
@@ -150,17 +156,17 @@ class HidOverI2c:
 
     def _register_write(self, register, data) -> tuple[i2c_msg]:
         _data = self._register_bytes(register) + struct.pack("<H", len(data)) + data
-        write = i2c_msg(self._addr, _data)
+        write = i2c_msg.write(self._addr, _data)
         return (write)
 
     def _register_read(self, register, size) -> tuple[i2c_msg, i2c_msg]:
-        write = i2c_msg(self._addr, self._register_bytes(register))
-        read = i2c_msg(self._addr, size)
+        write = i2c_msg.write(self._addr, self._register_bytes(register))
+        read = i2c_msg.read(self._addr, size)
         return (write, read)
 
     @staticmethod
     def _register_bytes(register) -> bytes:
-        return struct.unpack("<H", register)
+        return struct.pack("<H", register)
 
     @property
     def manufacturer(self):
@@ -206,3 +212,6 @@ class HidOverI2c:
     def _data_register(self):
         return self._descriptor.wDataRegister
     
+    @property
+    def report_descriptor_length(self):
+        return self._descriptor.wReportDescLength
