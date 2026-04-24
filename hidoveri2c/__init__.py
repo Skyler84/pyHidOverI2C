@@ -44,6 +44,24 @@ class HidOverI2c:
             values = cls.STRUCT.unpack(data)
             return cls(*values)
         
+        def pack(self) -> bytes:
+            return self.STRUCT.pack(
+                self.wHIDDescLength,
+                self.bcdVersion,
+                self.wReportDescLength,
+                self.wReportDescRegister,
+                self.wInputRegister,
+                self.wMaxInputLength,
+                self.wOutputRegister,
+                self.wMaxOutputLength,
+                self.wCommandRegister,
+                self.wDataRegister,
+                self.wVendorID,
+                self.wProductID,
+                self.wVersionID,
+                self.RESERVED
+            )
+        
     class RequestOpcode(Enum):
         RESET = 0b0001
         GET_REPORT   = 0b0010
