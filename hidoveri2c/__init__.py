@@ -1,6 +1,7 @@
 import struct
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, Flag
+
 
 try:
     from smbus2 import i2c_msg
@@ -63,6 +64,7 @@ class HidOverI2c:
             )
         
     class RequestOpcode(Enum):
+        RESERVED_0 = 0b0000
         RESET = 0b0001
         GET_REPORT   = 0b0010
         SET_REPORT   = 0b0011
@@ -71,7 +73,16 @@ class HidOverI2c:
         GET_PROTOCOL = 0b0110
         SET_PROTOCOL = 0b0111
         SET_POWER    = 0b1000
+        RESERVED_9  = 0b1001
+        RESERVED_A  = 0b1010
+        RESERVED_B  = 0b1011
+        RESERVED_C  = 0b1100
+        RESERVED_D  = 0b1101
         VENDOR       = 0b1110
+        RESERVED_F  = 0b1111
+
+    class Flags(Flag):
+        ALLOW_INVALID = 0
 
     class ReportType(Enum):
         RESERVED = 0b00
