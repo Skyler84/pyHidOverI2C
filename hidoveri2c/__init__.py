@@ -1,7 +1,7 @@
 import struct
+import time
 from dataclasses import dataclass
 from enum import Enum, Flag
-
 
 try:
     from smbus2 import i2c_msg
@@ -107,10 +107,14 @@ class HidOverI2c:
         self._bus.i2c_rdwr(*read_msgs)
         self._descriptor = self.HidOverI2cDescriptor.unpack(bytes(read_msgs[-1]))
 
-    def read(self, size, timeout=None):
-        return self._input_read(size, timeout)
+    def read(self, size: int, timeout_ms=None):
+        return self._input_read(size, timeout_ms)
     
-    def _read(self, size):
+    def _read(self, size: int):
+        """
+        Perform an immediate, unsolicited read from HidOverI2c device
+
+        """
         read = i2c_msg.read(self._addr, size)
         self._bus.i2c_rdwr(read)
         return bytes(read)
@@ -159,7 +163,8 @@ class HidOverI2c:
         _bytes = self._get_request(self.RequestOpcode.GET_IDLE, size=2)
         return struct.unpack("<H", _bytes)[0]
 
-    def set_protocol(self, protocol):
+    def set_protocol(self, protocol: int):
+        assert 0 <= protocol <= 1
         _bytes = struct.pack("<H", protocol)
         self._set_request(self.RequestOpcode.SET_PROTOCOL, data=_bytes)
 
@@ -189,6 +194,10 @@ class HidOverI2c:
 
     @staticmethod
     def _pack_request(opcode: RequestOpcode, report_type: ReportType, report_id) -> bytes:
+        """
+        Packs an opcode+report_type+report_id into 2 or 3 bytes, as required for the command register.
+        #7.1.1
+        """
         assert 0 <= report_id <= 255
         if report_id < 15:
             _bytes = [report_id | (report_type.value << 4), opcode.value]
@@ -197,9 +206,25 @@ class HidOverI2c:
 
         return bytes(_bytes)
 
-    def _input_read(self, size, timeout=None):
-        # check if we're non blocking and whether we have IRQ signal
-        pass
+    def _input_read(self, size, timeout_ms=0):
+        # TODO: check if we're non blocking and whether we have IRQ signal
+        start_time = time.time()
+        while True:
+            if timeout_ms > 0:
+                elapsed = (time.time() - start_time)*1000 # ms
+                remaining = timeout_ms - elapsed
+                if remaining <= 0:
+                    return None
+
+            data = self._read(2+self._descriptor.wMaxInputLength)
+            if len(data) <= 2:
+                continue # device initiated reset?
+            data_len = struct.unpack("<H", data)[0]
+            if data_len <= 2:
+                continue # null report?
+
+            report = data[2:data_len]
+            return report
 
     def _output_write(self, data) -> bytes:
         i2c_msgs = self._prepare_register_write(self._output_register, data)
@@ -221,12 +246,18 @@ class HidOverI2c:
         return (write,)
 
     def _prepare_register_read(self, register, size) -> tuple[i2c_msg, i2c_msg]:
+        """
+        Prepares a Write (regnum)+Read (regdata) I2C messages for a single transaction.
+        """
         write = i2c_msg.write(self._addr, self._register_bytes(register))
         read = i2c_msg.read(self._addr, size)
         return (write, read)
 
     @staticmethod
     def _register_bytes(register) -> bytes:
+        """
+        Returns the specified 16-bit value as bytes(2) as required for an i2c write register.
+        """
         return struct.pack("<H", register)
 
     @property
