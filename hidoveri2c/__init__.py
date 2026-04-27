@@ -219,7 +219,7 @@ class HidOverI2c:
             data = self._read(2+self._descriptor.wMaxInputLength)
             if len(data) <= 2:
                 continue # device initiated reset?
-            data_len = struct.unpack("<H", data)[0]
+            data_len = struct.unpack("<H", data[:2])[0]
             if data_len <= 2:
                 continue # null report?
 
