@@ -128,11 +128,11 @@ class HidOverI2c:
         elif report_type == self.ReportType.Feature:
             return self.get_feature_report(report_id, size)
 
-    def set_report(self, report_type, report_id, data):
+    def set_report(self, report_type, **kwargs):
         if report_type == self.ReportType.Input:
-            return self.set_input_report(report_id, data)
+            return self.set_input_report(**kwargs)
         elif report_type == self.ReportType.Feature:
-            return self.set_feature_report(report_id, data)
+            return self.set_feature_report(**kwargs)
     
     def get_input_report(self, report_id, size):
         return self._get_request(self.RequestOpcode.GET_REPORT, self.ReportType.Input, report_id, size=size)[2:]
@@ -310,13 +310,13 @@ class HidOverI2c:
 
 class HIDAPI_HidOverI2c(HidOverI2c):
 
-    def set_feature_report(self, report, *args, **kwargs):
+    def set_feature_report(self, report, report_id=None, **kwargs):
         report_id = report[0]
-        return super().set_feature_report(report_id, report, *args, **kwargs)
+        return super().set_feature_report(report_id, report, **kwargs)
 
-    def set_output_report(self, report, *args, **kwargs):
+    def set_output_report(self, report, report_id=None, **kwargs):
         report_id = report[0]
-        return super().set_output_report(report_id, report, *args, **kwargs)
+        return super().set_output_report(report_id, report, **kwargs)
 
     send_feature_report = set_feature_report # provided for compatibility.
     send_output_report  = set_output_report  # provided for compatibility.
