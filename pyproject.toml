@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "HidOverI2C"
-version = "0.1.2"
+version = "0.2.0"
 description = "Python library for communicating with HID-over-I2C devices"
 readme = "README.md"
 requires-python = ">=3.9"
