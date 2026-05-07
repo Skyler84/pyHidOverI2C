@@ -16,8 +16,7 @@ class I2CMessageInstance(Protocol):
 
 class I2CMessageClass(Protocol):
     """
-    Using flexible signatures to match both smbus2 and hidoveri2c
-    without triggering parameter name mismatch errors.
+    Using flexible signatures to match both smbus2 and alternatives
     """
     @staticmethod
     def read(*args: Any, **kwargs: Any) -> Any: ...
