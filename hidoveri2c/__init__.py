@@ -2,26 +2,10 @@ import struct
 import time
 from dataclasses import dataclass
 from enum import Enum, Flag
-from typing import Type, Any, Protocol, runtime_checkable
+from typing import Type
 
-from .i2c_msg import i2c_msg as _i2c_msg
-
-@runtime_checkable
-class I2CMessageInstance(Protocol):
-    addr: int
-    flags: int
-    len: int
-    def __bytes__(self) -> bytes: ...
-
-class I2CMessageClass(Protocol):
-    """
-    Using flexible signatures to match both smbus2 and alternatives
-    """
-    @staticmethod
-    def read(address: int, length: int) -> I2CMessageInstance: ...
-    
-    @staticmethod
-    def write(address: int, buf: bytes|str|list[int]) -> I2CMessageInstance: ...
+from .i2c_msg import i2c_msg as i2c_msg
+from .protocols import I2CMessageClass
 
 class HidOverI2c:
     @dataclass
@@ -347,3 +331,8 @@ class HIDAPI_HidOverI2c(HidOverI2c):
 
     send_feature_report = set_feature_report # provided for compatibility.
     send_output_report  = set_output_report  # provided for compatibility.
+
+__all__ = [
+    'HidOverI2c',
+    'HIDAPI_HidOverI2c',
+]
