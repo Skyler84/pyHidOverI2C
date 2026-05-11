@@ -250,12 +250,12 @@ class HidOverI2c:
         self._bus.i2c_rdwr(*i2c_msgs)
         return bytes(i2c_msgs[-1])
 
-    def _prepare_register_write(self, register, data) -> tuple[i2c_msg]:
-        _data = self._register_bytes(register) + struct.pack("<H", len(data)) + data
+    def _prepare_register_write(self, register, data) -> tuple[I2CMessageClass]:
+        _data = self._register_bytes(register) + struct.pack("<H", len(data)+2) + data
         write = self._msg.write(self._addr, _data)
         return (write,)
 
-    def _prepare_register_read(self, register, size) -> tuple[i2c_msg, i2c_msg]:
+    def _prepare_register_read(self, register, size) -> tuple[I2CMessageClass, I2CMessageClass]:
         """
         Prepares a Write (regnum)+Read (regdata) I2C messages for a single transaction.
         """
