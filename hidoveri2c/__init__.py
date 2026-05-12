@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, Flag
 from typing import Type
 
-from .i2c_msg import i2c_msg as i2c_msg
+from .i2c_msg import i2c_msg as _i2c_msg
 from .protocols import I2CMessageClass
 
 class HidOverI2c:
@@ -121,12 +121,11 @@ class HidOverI2c:
         self._output_write(data)
 
     def get_report(self, report_type, report_id, size) -> bytes:
+        assert report_type in (self.ReportType.Input, self.ReportType.Feature)
         if report_type == self.ReportType.Input:
             return self.get_input_report(report_id, size)
         elif report_type == self.ReportType.Feature:
             return self.get_feature_report(report_id, size)
-        else:
-            return bytes()
 
     def set_report(self, report_type, report_id, data) -> None:
         if report_type == self.ReportType.Output:
@@ -135,10 +134,16 @@ class HidOverI2c:
             self._set_feature_report(report_id, data)
     
     def get_input_report(self, report_id, size) -> bytes:
-        return self._get_request(self.RequestOpcode.GET_REPORT, report_type=self.ReportType.Input, report_id=report_id, size=size)[2:]
+        raw_data = self._get_request(self.RequestOpcode.GET_REPORT, report_type=self.ReportType.Input, report_id=report_id, size=size)[2:]
+        length, data = struct.unpack("<H", raw_data[:2])[0], raw_data[2:]
+        assert length == (len(data)+2)
+        return data
     
     def get_feature_report(self, report_id, size) -> bytes:
-        return self._get_request(self.RequestOpcode.GET_REPORT, report_type=self.ReportType.Feature, report_id=report_id, size=size)
+        raw_data = self._get_request(self.RequestOpcode.GET_REPORT, report_type=self.ReportType.Feature, report_id=report_id, size=size)
+        length, data = struct.unpack("<H", raw_data[:2])[0], raw_data[2:]
+        assert length == (len(data)+2)
+        return data
 
     def get_report_descriptor(self, size = 4096):
         i2c_msgs = self._prepare_register_read(self._report_descriptor_register, size)
@@ -146,16 +151,20 @@ class HidOverI2c:
         return bytes(i2c_msgs[-1])
 
     def get_idle(self, report_id=0):
-        _bytes = self._get_request(self.RequestOpcode.GET_IDLE, report_type=self.ReportType.Feature, report_id=report_id, size=2)
-        return struct.unpack("<H", _bytes)[0]
+        raw_data = self._get_request(self.RequestOpcode.GET_IDLE, report_type=self.ReportType.Feature, report_id=report_id, size=2)
+        length, idle = struct.unpack("<HH", raw_data)
+        assert length == (2 + 2)
+        return idle
     
     def set_idle(self, duration, report_id=0):
         _bytes = struct.pack("<H", duration)
         self._set_request(self.RequestOpcode.SET_IDLE, data=_bytes, report_id=report_id)
 
     def get_protocol(self):
-        _bytes = self._get_request(self.RequestOpcode.GET_IDLE, size=2)
-        return struct.unpack("<H", _bytes)[0]
+        raw_data = self._get_request(self.RequestOpcode.GET_PROTOCOL, size=2)
+        length, protocol = struct.unpack("<HH", raw_data)
+        assert length == (2 + 2)
+        return protocol
 
     def set_protocol(self, protocol: int):
         assert 0 <= protocol <= 1
@@ -182,6 +191,9 @@ class HidOverI2c:
         return bytes(read)
 
     def _input_read(self, size, timeout_ms=0):
+        """
+        Perform a read from the input register.
+        """
         # TODO: check if we're non blocking and whether we have IRQ signal
         start_time = time.time()
         while True:
@@ -191,10 +203,11 @@ class HidOverI2c:
                 if remaining <= 0:
                     return None
 
-            data = self._read(2+self._descriptor.wMaxInputLength)
+            # wMaxInputLength includes the 2 byte length prefix, so we read that many bytes to ensure we get a full report.
+            data = self._read(self._descriptor.wMaxInputLength)
             if len(data) <= 2:
                 continue # device initiated reset?
-            data_len = struct.unpack("<H", data)[0]
+            data_len = struct.unpack("<H", data[:2])[0]
             if data_len <= 2:
                 continue # null report?
 
@@ -215,13 +228,14 @@ class HidOverI2c:
     def _get_request(self, opcode: RequestOpcode, *, report_type = ReportType.RESERVED, report_id = 0, size) -> bytes:
         """
         Perform a request which will Read from the data-register.
+        This function returns the data read INCLUDING the 2-byte length prefix.
         """
         _command_bytes = self._register_bytes(self._command_register) + self._pack_request(opcode, report_type, report_id)
         _data_bytes = self._register_bytes(self._data_register)
         write = self._msg.write(self._addr, _command_bytes + _data_bytes)
         read = self._msg.read(self._addr, size+2) # +2 for length prefix
         self._bus.i2c_rdwr(write, read)
-        return bytes(read)[2:]
+        return bytes(read)
 
     def _set_request(self, opcode: RequestOpcode, report_type = ReportType.RESERVED, report_id = 0, data: bytes|None = None) -> None:
         """
