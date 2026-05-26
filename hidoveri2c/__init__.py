@@ -158,7 +158,7 @@ class HidOverI2c:
     
     def set_idle(self, duration, report_id=0):
         _bytes = struct.pack("<H", duration)
-        self._set_request(self.RequestOpcode.SET_IDLE, data=_bytes, report_id=report_id)
+        self._set_request(self.RequestOpcode.SET_IDLE, data=_bytes, report_id=report_id, backwards=True)
 
     def get_protocol(self):
         raw_data = self._get_request(self.RequestOpcode.GET_PROTOCOL, size=2)
@@ -169,7 +169,7 @@ class HidOverI2c:
     def set_protocol(self, protocol: int):
         assert 0 <= protocol <= 1
         _bytes = struct.pack("<H", protocol)
-        self._set_request(self.RequestOpcode.SET_PROTOCOL, data=_bytes)
+        self._set_request(self.RequestOpcode.SET_PROTOCOL, data=_bytes, backwards=True)
 
     def reset(self):
         self._set_request(self.RequestOpcode.RESET)
@@ -237,14 +237,17 @@ class HidOverI2c:
         self._bus.i2c_rdwr(write, read)
         return bytes(read)
 
-    def _set_request(self, opcode: RequestOpcode, report_type = ReportType.RESERVED, report_id = 0, data: bytes|None = None) -> None:
+    def _set_request(self, opcode: RequestOpcode, report_type = ReportType.RESERVED, report_id = 0, data: bytes|None = None, backwards=False) -> None:
         """
         Perform a request which will Write to the data-register.
         """
         _command_bytes = self._register_bytes(self._command_register) + self._pack_request(opcode, report_type, report_id)
         if data is not None:
             _data_bytes = self._register_bytes(self._data_register) + struct.pack("<H", len(data)+2) + data
-            write = self._msg.write(self._addr, _command_bytes + _data_bytes)
+            if backwards: # We actually send the data THEN the command
+                write = self._msg.write(self._addr, _data_bytes + _command_bytes)
+            else: # We send the command THEN the data, which is almost always.
+                write = self._msg.write(self._addr, _command_bytes + _data_bytes)
         else:
             write = self._msg.write(self._addr, _command_bytes)
         self._bus.i2c_rdwr(write)
