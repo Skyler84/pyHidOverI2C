@@ -1,5 +1,6 @@
+from .protocols.i2c_msg import I2CMessageClass
 
-class i2c_msg:
+class i2c_msg(I2CMessageClass):
     READ = 0x01
     WRITE = 0x00
     buf: list[int]
@@ -14,12 +15,12 @@ class i2c_msg:
         self.flags = flags
 
     @staticmethod
-    def read(addr, size):
-        return i2c_msg(addr, [0]*size, size, i2c_msg.READ)
+    def read(address: int, length: int):
+        return i2c_msg(address, [0]*length, length, i2c_msg.READ)
     
     @staticmethod
-    def write(addr, data):
-        return i2c_msg(addr, data, len(data), i2c_msg.WRITE)
+    def write(address: int, buf: bytes | str | list[int]):
+        return i2c_msg(address, buf, len(buf), i2c_msg.WRITE)
 
     def __iter__(self):
         """ Iterator / Generator
