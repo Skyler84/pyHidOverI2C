@@ -19,8 +19,10 @@ class i2c_msg(I2CMessageClass):
         return i2c_msg(address, [0]*length, length, i2c_msg.READ)
     
     @staticmethod
-    def write(address: int, buf: bytes | str | list[int]):
-        return i2c_msg(address, buf, len(buf), i2c_msg.WRITE)
+def write(address: int, buf: bytes | str | list[int]):
+    if isinstance(buf, str):
+        buf = buf.encode()
+    return i2c_msg(address, buf, len(buf), i2c_msg.WRITE)
 
     def __iter__(self):
         """ Iterator / Generator
