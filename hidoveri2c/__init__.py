@@ -114,15 +114,18 @@ class HidOverI2c:
 
         read_msgs = self._prepare_register_read(self._descriptor_reg, 4)
         self._bus.i2c_rdwr(*read_msgs)
-        if (len(read_msgs[-1]) != 4):
+        if (len(read_msgs[-1]) != self.HidOverI2cDescriptorHeader.STRUCT.size):
             raise Exception("Unable to read HID/I2C Descriptor header")
         descriptor_header = self.HidOverI2cDescriptorHeader.unpack(bytes(read_msgs[-1]))
         
         read_msgs = self._prepare_register_read(self._descriptor_reg, descriptor_header.wHIDDescLength)
         self._bus.i2c_rdwr(*read_msgs)
-        if len(read_msgs[-1]) != 0x1e:
-            raise Exception(f"Invalid length of HID/I2C Descriptor. Expected {0x1e} bytes, got {len(read_msgs[-1])}")
+        if len(read_msgs[-1]) != self.HidOverI2cDescriptor.STRUCT.size:
+            raise Exception(f"Invalid length of HID/I2C Descriptor. Expected {self.HidOverI2cDescriptor.STRUCT.size} bytes, got {len(read_msgs[-1])}")
         self._descriptor_internal = self.HidOverI2cDescriptor.unpack(bytes(read_msgs[-1]))
+
+    def deinit(self):
+        self._descriptor_internal = None
 
     def read(self, size: int, timeout_ms=0):
         return self._input_read(size, timeout_ms)
@@ -324,7 +327,8 @@ class HidOverI2c:
     def _descriptor(self):
         if self._descriptor_internal is None:
             self.init_descriptor()
-        assert self._descriptor_internal is not None
+        if self._descriptor_internal is None:
+            raise Exception("Failed to read HID/I2C Descriptor")
         return self._descriptor_internal
 
     @property
@@ -333,7 +337,7 @@ class HidOverI2c:
 
     @property
     def product(self):
-        return "HID I2C Devic"
+        return "HID I2C Device"
 
     @property
     def serial(self):
